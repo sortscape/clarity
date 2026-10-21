@@ -77,6 +77,7 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "removed")).toBe(0);
     });
+
     test("does not track the rest of a subtree removed while Clarity was walking it", async ({ page }) => {
         await page.evaluate(() => {
             let row = document.createElement("div");
@@ -97,6 +98,7 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "removed")).toBe(0);
     });
+
     test("drops the records of a removed subtree", async ({ page }) => {
         await page.evaluate(() => {
             let row = document.createElement("div");
@@ -119,6 +121,7 @@ test.describe("memory - removed nodes", () => {
 
         expect(await recorded(page, "removed")).toBe(0);
     });
+
     test("keeps tracking a removed node that is put back", async ({ page }) => {
         await page.evaluate(() => {
             let row = document.createElement("div");
@@ -139,6 +142,7 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "moved")).toBe(3);
     });
+
     test("stops tracking nodes removed by mutations it throttles while the page is idle", async ({ page }) => {
         // Clarity throttles a mutation that keeps repeating without user interaction and keeps
         // only the latest of each kind; the removals of the ones it drops must still count.
@@ -166,5 +170,24 @@ test.describe("memory - removed nodes", () => {
         await page.waitForTimeout(10000);
 
         expect(await tracked(page, "removed")).toBe(0);
+    });
+
+    test("releases the load listener of a removed masked image", async ({ page }) => {
+        await page.evaluate(() => {
+            let image = document.createElement("img");
+            image.className = "masked";
+            document.getElementById("root").appendChild(image);
+            (window as any).image = image;
+        });
+        await page.waitForTimeout(500);
+        let loaded = await page.evaluate(async (): Promise<boolean> => {
+            let image = (window as any).image as HTMLImageElement;
+            image.remove();
+            await new Promise((resolve: (value: unknown) => void): number => window.setTimeout(resolve, 300));
+            image.dispatchEvent(new Event("load"));
+            return image.hasAttribute("data-clarity-loaded");
+        });
+
+        expect(loaded).toBe(false);
     });
 });

@@ -2,7 +2,7 @@ import { Privacy } from "@clarity-types/core";
 import { Code, Setting, Severity } from "@clarity-types/data";
 import { Constant, NodeInfo, NodeMeta, NodeValue, Selector, SelectorInput, Source } from "@clarity-types/layout";
 import config from "@src/core/config";
-import { bind } from "@src/core/event";
+import { bind, unbind } from "@src/core/event";
 import hash from "@src/core/hash";
 import { time } from "@src/core/time";
 import { shortid } from "@src/data/metadata";
@@ -427,6 +427,11 @@ function removeNodeFromNodesMap(id: number) {
     if (nodeToBeRemoved && nodeToBeRemoved?.nodeType === Node.ELEMENT_NODE && nodeToBeRemoved["tagName"] === "IFRAME") {
         const iframe = nodeToBeRemoved as HTMLIFrameElement;
         removeObserver(iframe);
+    }
+
+    // updateImageSize() binds "load" on masked images that haven't loaded, and bindings are only released on stop
+    if (nodeToBeRemoved && nodeToBeRemoved.nodeType === Node.ELEMENT_NODE && nodeToBeRemoved["tagName"] === Constant.ImageTag) {
+        unbind(nodeToBeRemoved);
     }
 
     nodesMap.delete(id);
