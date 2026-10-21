@@ -15,6 +15,7 @@ import * as doc from "@src/layout/document";
 import * as dom from "@src/layout/dom";
 import * as metric from "@src/data/metric";
 import encode from "@src/layout/encode";
+import hash from "@src/core/hash";
 import * as region from "@src/layout/region";
 import traverse from "@src/layout/traverse";
 import processNode from "./node";
@@ -220,6 +221,8 @@ function track(m: MutationRecord, timer: Timer, instance: number, timestamp: num
     // repeated mutations can cause elements to be destroyed and then recreated as new DOM nodes
     // In those cases, IDs will change however the selector (which is relative to DOM xPath) remains the same
     let key = [parent, element, m.attributeName, names(m.addedNodes), names(m.removedNodes)].join();
+    // The joined selectors run to several KB, and history keeps up to MaxMutationHistoryCount keys: keep a hash instead
+    key = key.length + Constant.Dot + hash(key);
 
     // Initialize an entry if it doesn't already exist
     history[key] = key in history ? history[key] : [0, instance];
