@@ -1,0 +1,47 @@
+# SortScape's fork (SORTSCAPE.md): checks pull requests into sortscape/* branches, and on a
+# v<version>-sortscape.<n> tag, attaches the clarity-js package to a GitHub release.
+
+name: SortScape release
+on:
+  pull_request:
+    branches: [ "sortscape/**" ]
+  push:
+    tags: [ "v*-sortscape.*" ]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.17.0
+    - run: yarn install --frozen-lockfile
+    - run: yarn build:js
+    - run: npx playwright install chromium --with-deps
+    - run: yarn workspace clarity-js test
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.17.0
+    - run: yarn install --frozen-lockfile
+    - run: yarn build:js
+    - name: Pack clarity-js
+      working-directory: packages/clarity-js
+      run: |
+        npm pack
+        mv clarity-js-*.tgz "$GITHUB_WORKSPACE/clarity-js-${GITHUB_REF_NAME#v}.tgz"
+    - name: Create the release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "$GITHUB_REF_NAME" "clarity-js-${GITHUB_REF_NAME#v}.tgz" --title "$GITHUB_REF_NAME" \
+          --notes "clarity-js with SortScape's memory fixes, built from ${GITHUB_SHA}. See SORTSCAPE.md."
