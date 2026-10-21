@@ -1,12 +1,13 @@
-# SortScape's fork (SORTSCAPE.md): checks pull requests into sortscape/* branches, and on a
-# v<version>-sortscape.<n> tag, attaches the clarity-js package to a GitHub release.
+# SortScape's fork (SORTSCAPE.md): runs the clarity-js tests on pull requests into and pushes to
+# sortscape/* branches. On a push, if SORTSCAPE_RELEASE names a release that doesn't exist yet,
+# tags the commit v<that name> and attaches the packed clarity-js to a GitHub release.
 
 name: SortScape release
 on:
   pull_request:
     branches: [ "sortscape/**" ]
   push:
-    tags: [ "v*-sortscape.*" ]
+    branches: [ "sortscape/**" ]
 permissions:
   contents: read
 jobs:
@@ -22,26 +23,41 @@ jobs:
     - run: npx playwright install chromium --with-deps
     - run: yarn workspace clarity-js test
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v4
+    - name: Check for a new release
+      id: release
+      run: |
+        name="$(tr -d '[:space:]' < SORTSCAPE_RELEASE)"
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+        if gh release view "v$name" > /dev/null 2>&1; then
+          echo "v$name already exists"
+          echo "new=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "new=true" >> "$GITHUB_OUTPUT"
+        fi
     - uses: actions/setup-node@v4
+      if: steps.release.outputs.new == 'true'
       with:
         node-version: 22.17.0
-    - run: yarn install --frozen-lockfile
-    - run: yarn build:js
+    - if: steps.release.outputs.new == 'true'
+      run: yarn install --frozen-lockfile && yarn build:js
     - name: Pack clarity-js
+      if: steps.release.outputs.new == 'true'
       working-directory: packages/clarity-js
       run: |
         npm pack
-        mv clarity-js-*.tgz "$GITHUB_WORKSPACE/clarity-js-${GITHUB_REF_NAME#v}.tgz"
+        mv clarity-js-*.tgz "$GITHUB_WORKSPACE/clarity-js-${{ steps.release.outputs.name }}.tgz"
     - name: Create the release
-      env:
-        GH_TOKEN: ${{ github.token }}
+      if: steps.release.outputs.new == 'true'
       run: |
-        gh release create "$GITHUB_REF_NAME" "clarity-js-${GITHUB_REF_NAME#v}.tgz" --title "$GITHUB_REF_NAME" \
-          --notes "clarity-js with SortScape's memory fixes, built from ${GITHUB_SHA}. See SORTSCAPE.md."
+        gh release create "v${{ steps.release.outputs.name }}" "clarity-js-${{ steps.release.outputs.name }}.tgz" \
+          --target "$GITHUB_SHA" --title "v${{ steps.release.outputs.name }}" \
+          --notes "clarity-js with SortScape's memory fixes, built from $GITHUB_SHA on $GITHUB_REF_NAME. See SORTSCAPE.md."

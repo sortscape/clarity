@@ -14,10 +14,13 @@ for how the build is swapped in.
 - `sortscape/<version>` is an upstream release commit plus our fixes, one commit
   each. `sortscape/0.8.72` starts at upstream's
   "Detect WebMCP presence (0.8.72)" (a8015d7).
-- A tag `v<version>-sortscape.<n>` on that branch runs
-  `.github/workflows/sortscape-release.yml`. It runs the clarity-js tests,
-  packs `packages/clarity-js`, and attaches `clarity-js-<version>-sortscape.<n>.tgz`
-  to a GitHub release. sortscape-web depends on that file's URL.
+- `SORTSCAPE_RELEASE` names the branch's release, `<version>-sortscape.<n>`.
+  Every push to a `sortscape/*` branch runs `.github/workflows/sortscape-release.yml`:
+  the clarity-js tests, and, when no release of that name exists yet, a
+  `v<version>-sortscape.<n>` tag and GitHub release with the packed
+  `clarity-js-<version>-sortscape.<n>.tgz` attached. To cut a release, bump the
+  file in the commit that should be released. sortscape-web depends on the
+  file's URL.
 - The package keeps upstream's version (`package.json` and `src/core/version.ts`),
   so Clarity's servers see the version the hosted tag would report.
 
@@ -49,5 +52,6 @@ They are worth offering upstream.
    `git cherry-pick a8015d7..sortscape/<previous version>`. Drop a fix that
    upstream has made, and resolve conflicts against upstream's code.
 3. `yarn install`, `yarn build:js`, `yarn workspace clarity-js test`.
-4. Push the branch, tag `v<version>-sortscape.1`, push the tag, and update the
-   URL and the release passed to `swapClarityScript` in sortscape-web.
+4. Set `SORTSCAPE_RELEASE` to `<version>-sortscape.1` and push the branch.
+   Then update the URL in sortscape-web's `package.json`, and the release passed
+   to `swapClarityScript` in its head partial.
