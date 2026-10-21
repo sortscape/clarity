@@ -98,6 +98,11 @@ export function add(node: Node, parent: Node, data: NodeInfo, source: Source): v
         return;
     }
 
+    // Nor nodes under a removed parent: traverse() yields between slices, so it can resume inside a subtree removed meanwhile
+    if (parent && parent.nodeType === Node.ELEMENT_NODE && !nodesMap.has(parentId)) {
+        return;
+    }
+
     let id = getId(node, true);
     let previousId = getPreviousId(node);
     let parentValue: NodeValue = null;

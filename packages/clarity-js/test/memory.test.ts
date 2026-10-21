@@ -77,4 +77,24 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "removed")).toBe(0);
     });
+    test("does not track the rest of a subtree removed while Clarity was walking it", async ({ page }) => {
+        await page.evaluate(() => {
+            let row = document.createElement("div");
+            let nodes: Node[] = [row];
+            for (let i = 0; i < 4000; i++) {
+                let cell = document.createElement("div");
+                cell.className = "cell";
+                cell.textContent = "visit " + i;
+                row.appendChild(cell);
+                nodes.push(cell, cell.firstChild);
+            }
+            document.getElementById("root").appendChild(row);
+            (window as any).removed = nodes;
+            // Once Clarity has started walking the row (it yields between slices), remove it.
+            setTimeout(() => row.remove(), 50);
+        });
+        await page.waitForTimeout(3000);
+
+        expect(await tracked(page, "removed")).toBe(0);
+    });
 });
