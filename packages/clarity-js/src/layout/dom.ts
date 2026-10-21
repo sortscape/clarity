@@ -92,8 +92,9 @@ export function getId(node: Node, autogen: boolean = false): number {
 export function add(node: Node, parent: Node, data: NodeInfo, source: Source): void {
     let parentId = parent ? getId(parent) : null;
 
-    // Do not add detached nodes
-    if ((!parent || !parentId) && (node as ShadowRoot).host == null && node.nodeType !== Node.DOCUMENT_TYPE_NODE) {
+    // Do not add detached nodes. Only a shadow root may have no parent: <a> and <area> have a host too (their URL's).
+    let shadowRoot = node.nodeType === Node.DOCUMENT_FRAGMENT_NODE && (node as ShadowRoot).host != null;
+    if ((!parent || !parentId) && !shadowRoot && node.nodeType !== Node.DOCUMENT_TYPE_NODE) {
         return;
     }
 
