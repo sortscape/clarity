@@ -245,7 +245,11 @@ function track(m: MutationRecord, timer: Timer, instance: number, timestamp: num
         return m.type;
       }
 
-      // we only store the most recent mutation for a given key if it is being throttled
+      // we only store the most recent mutation for a given key if it is being throttled.
+      // The one it replaces is dropped, but its removals still need processing, or the removed nodes stay tracked.
+      if (key in throttledMutations) {
+        processNodeList(throttledMutations[key].mutation.removedNodes, Source.ChildListRemove, timer, timestamp);
+      }
       throttledMutations[key] = { mutation: m, timestamp };
 
       return Constant.Throttle;

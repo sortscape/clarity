@@ -139,4 +139,32 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "moved")).toBe(3);
     });
+    test("stops tracking nodes removed by mutations it throttles while the page is idle", async ({ page }) => {
+        // Clarity throttles a mutation that keeps repeating without user interaction and keeps
+        // only the latest of each kind; the removals of the ones it drops must still count.
+        await page.evaluate(() => {
+            let root = document.getElementById("root");
+            let removed: Node[] = [];
+            (window as any).removed = removed;
+            let round = 0;
+            let timer = setInterval(() => {
+                let column = document.createElement("div");
+                for (let j = 0; j < 20; j++) {
+                    let card = document.createElement("div");
+                    card.textContent = "visit";
+                    column.appendChild(card);
+                }
+                let previous = root.firstElementChild;
+                if (previous) {
+                    removed.push(previous);
+                    previous.querySelectorAll("*").forEach((n: Element) => removed.push(n, n.firstChild));
+                }
+                root.replaceChildren(column);
+                if (++round === 60) { clearInterval(timer); }
+            }, 100);
+        });
+        await page.waitForTimeout(10000);
+
+        expect(await tracked(page, "removed")).toBe(0);
+    });
 });
