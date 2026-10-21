@@ -97,4 +97,46 @@ test.describe("memory - removed nodes", () => {
 
         expect(await tracked(page, "removed")).toBe(0);
     });
+    test("drops the records of a removed subtree", async ({ page }) => {
+        await page.evaluate(() => {
+            let row = document.createElement("div");
+            let nodes: Node[] = [row];
+            for (let i = 0; i < 20; i++) {
+                let cell = document.createElement("div");
+                cell.textContent = "visit " + i;
+                row.appendChild(cell);
+                nodes.push(cell, cell.firstChild);
+            }
+            document.getElementById("root").appendChild(row);
+            (window as any).removed = nodes;
+        });
+        await page.waitForTimeout(500);
+        expect(await recorded(page, "removed")).toBe(41);
+
+        await page.evaluate(() => { ((window as any).removed[0] as Element).remove(); });
+        await page.waitForTimeout(2500);
+        await touch(page);
+
+        expect(await recorded(page, "removed")).toBe(0);
+    });
+    test("keeps tracking a removed node that is put back", async ({ page }) => {
+        await page.evaluate(() => {
+            let row = document.createElement("div");
+            let cell = document.createElement("span");
+            cell.textContent = "visit";
+            row.appendChild(cell);
+            document.getElementById("root").appendChild(row);
+            (window as any).moved = [row, cell, cell.firstChild];
+        });
+        await page.waitForTimeout(500);
+        await page.evaluate(() => {
+            let row = (window as any).moved[0] as Element;
+            row.remove();
+            setTimeout(() => document.getElementById("root").appendChild(row), 100);
+        });
+        await page.waitForTimeout(2500);
+        await touch(page);
+
+        expect(await tracked(page, "moved")).toBe(3);
+    });
 });

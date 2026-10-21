@@ -4,6 +4,7 @@ import { Constant, NodeInfo, NodeMeta, NodeValue, Selector, SelectorInput, Sourc
 import config from "@src/core/config";
 import { bind } from "@src/core/event";
 import hash from "@src/core/hash";
+import { time } from "@src/core/time";
 import { shortid } from "@src/data/metadata";
 import * as internal from "@src/diagnostic/internal";
 import { removeObserver } from "@src/layout/node";
@@ -15,6 +16,7 @@ let nodesMap: Map<Number, Node> = null; // Maps id => node to retrieve further n
 let values: NodeValue[] = [];
 let updateMap: number[] = [];
 let hashMap: { [hash: string]: number } = {};
+let removed: [number, number][] = []; // [id, time] of removed subtree roots, for prune()
 let override = [];
 let unmask = [];
 let maskText: string[] = [];
@@ -43,6 +45,7 @@ function reset(): void {
     values = [];
     updateMap = [];
     hashMap = {};
+    removed = [];
     override = [];
     unmask = [];
     maskText = MaskTextList;
@@ -123,6 +126,11 @@ export function add(node: Node, parent: Node, data: NodeInfo, source: Source): v
         regionId = id;
     }
 
+    // A removed node put back gets a new record, without the children it had: prune any not put back with it
+    if (values[id]) {
+        for (let child of values[id].children) { removed.push([child, time()]); }
+    }
+
     nodesMap.set(id, node);
     values[id] = {
         id,
@@ -164,8 +172,8 @@ export function update(node: Node, parent: Node, data: NodeInfo, source: Source)
             changed = true;
             let oldParentId = value.parent;
             value.parent = parentId;
-            // Move this node to the right location under new parent
-            if (parentId !== null && parentId >= 0) {
+            // Move this node to the right location under new parent. Under a pruned parent, it isn't tracked either.
+            if (parentId !== null && parentId >= 0 && values[parentId]) {
                 let childIndex = previousId === null ? 0 : values[parentId].children.indexOf(previousId) + 1;
                 values[parentId].children.splice(childIndex, 0, id);
                 // Update region after the move
@@ -176,7 +184,7 @@ export function update(node: Node, parent: Node, data: NodeInfo, source: Source)
             }
 
             // Remove reference to this node from the old parent
-            if (oldParentId !== null && oldParentId >= 0) {
+            if (oldParentId !== null && oldParentId >= 0 && values[oldParentId]) {
                 let nodeIndex = values[oldParentId].children.indexOf(id);
                 if (nodeIndex >= 0) {
                     values[oldParentId].children.splice(nodeIndex, 1);
@@ -311,7 +319,7 @@ function position(parent: NodeValue, child: NodeValue): number {
     let idx = parent ? parent.children.indexOf(child.id) : -1;
     while (idx-- > 0) {
         let sibling = values[parent.children[idx]];
-        if (child.data.tag === sibling.data.tag) {
+        if (sibling && child.data.tag === sibling.data.tag) {
             child.metadata.position = sibling.metadata.position + 1;
             break;
         }
@@ -366,8 +374,33 @@ export function updates(): NodeValue[] {
         if (id in values) { output.push(values[id]); }
     }
     updateMap = [];
+    prune();
 
     return output;
+}
+
+// Records of a removed subtree are kept for this long after its removal: until the removal is encoded,
+// and the interaction events that may name its nodes (encoded up to 750ms late) are too.
+const PruneDelay = 2000;
+
+// Drop the records of subtrees removed at least PruneDelay ago, unless a node is back in the document.
+// Clarity otherwise keeps a record of every node it has seen until it stops.
+function prune(): void {
+    let now = time();
+    let stack: number[] = [];
+    while (removed.length > 0 && now - removed[0][1] >= PruneDelay) {
+        stack.push(removed.shift()[0]);
+    }
+    while (stack.length > 0) {
+        let id = stack.pop();
+        let value = values[id];
+        if (!value || nodesMap.has(id)) { continue; }
+        for (let child of value.children) { stack.push(child); }
+        for (let h of value.hash || []) {
+            if (h && hashMap[h] === id) { delete hashMap[h]; }
+        }
+        delete values[id];
+    }
 }
 
 function remove(id: number, source: Source): void {
@@ -379,6 +412,7 @@ function remove(id: number, source: Source): void {
 
         // Clean up node references for removed nodes
         removeNodeFromNodesMap(id);
+        removed.push([id, time()]);
     }
 }
 
