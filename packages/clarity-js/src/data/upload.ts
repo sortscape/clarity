@@ -182,9 +182,15 @@ async function upload(final: boolean = false): Promise<void> {
     // We also attempt to compress the payload if it is not the last payload and the browser supports it
     // In all other cases, we continue to send back string value
     let payload = stringify(encoded);
+    // `await compress(payload)` yields, and Clarity can stop meanwhile: suspend after 5 minutes
+    // without interaction, a limit, or the page ending it. stop() clears envelope.data (so reading
+    // it threw "reading 'sequence'") and sends its own final payload, and a start() after it makes
+    // a new envelope for a new page. Either way this payload belonged to the instance that ended.
+    let current = envelope.data;
     let zipped = last ? null : await compress(payload);
+    if (envelope.data !== current) { return; }
     metric.sum(Metric.TotalBytes, zipped ? zipped.length : payload.length);
-    send(payload, zipped, envelope.data.sequence, last);
+    send(payload, zipped, current.sequence, last);
 }
 
 function stringify(encoded: EncodedPayload): string {
