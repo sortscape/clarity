@@ -26,7 +26,7 @@ for how the build is swapped in.
 
 ## The fixes
 
-All in `packages/clarity-js/src/layout`, each with a test in
+Fixes 1 to 6 are in `packages/clarity-js/src/layout`, each with a test in
 `packages/clarity-js/test/memory.test.ts` where there is behavior to test:
 
 1. **Don't track links in removed subtrees.** `add()` let a node without a
@@ -41,6 +41,22 @@ All in `packages/clarity-js/src/layout`, each with a test in
 5. **Release the load listener of removed images** (masked images that hadn't
    loaded).
 6. **Key the mutation history by a hash** instead of joined selector paths.
+
+And one outside the layout code, tested in `packages/clarity-js/test/upload.test.ts`:
+
+7. **Drop an upload whose instance stopped while it compressed.** `upload()`
+   awaits `compress()`, and Clarity can stop meanwhile (suspend after 5 minutes
+   without interaction, a limit, or the page ending it). `stop()` clears
+   `envelope.data`, so the `envelope.data.sequence` read after the await threw
+   `TypeError: Cannot read properties of null (reading 'sequence')`. In
+   sortscape-web this was Rollbar's most frequent browser error on the schedule
+   (about 100 a day in Nov 2026), from tabs left open. It shows in Rollbar only
+   because we serve the build from our own origin: errors in the hosted
+   clarity.js are cross-origin, so browsers report them as "Script error." with
+   no details. The payload is dropped rather than sent because `stop()` has
+   already sent that instance's final payload and reset its retry tracking, and
+   a `start()` after it belongs to a new page. Upstream master (0.8.77) still
+   has this.
 
 They are worth offering upstream.
 
